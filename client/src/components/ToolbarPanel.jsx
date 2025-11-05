@@ -2,7 +2,7 @@ import { useState } from "react";
 import Tabs from "./common/Tabs";
 import ResizeSection from "./resize/ResizeSection";
 import CompressionOptions from "./compression/CompressionOptions";
-import DownloadOptions from "./download/DownloadOptions";
+import DownloadOptions from "./Download/DownloadOptions";
 
 export default function ToolbarPanel({ selectedImage, updateImage, editedImages, setEditedImages ,images }) {
 const [activeTab, setActiveTab] = useState("Resize");
