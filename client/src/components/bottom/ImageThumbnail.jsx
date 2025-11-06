@@ -15,11 +15,10 @@ export default function ImageThumbnail({ image, isSelected, onSelect, onDelete }
         className="w-full h-full object-cover"
       />
 
-     
       <button
         onClick={(e) => {
           e.stopPropagation();
-          onDelete(image);
+          onDelete(image.name); // pass name for frontend-only delete
         }}
         className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
       >

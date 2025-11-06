@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
-import { resizeImage } from "../utils/imageUtils";
 
 const PRESETS = {
   Instagram: [
-    { name: "Post ", w: 1080, h: 1080 },
-    { name: "Story ", w: 1080, h: 1920 },
-    { name: "Reel ", w: 1080, h: 1920 },
+    { name: "Post", w: 1080, h: 1080 },
+    { name: "Story", w: 1080, h: 1920 },
+    { name: "Reel", w: 1080, h: 1920 },
   ],
   Facebook: [
     { name: "Cover Photo", w: 820, h: 312 },
@@ -18,25 +17,48 @@ const PRESETS = {
   ],
 };
 
-export default function ResizeBySocial({ selectedImage, updateImage }) {
+export default function ResizeBySocial({ selectedImage, updateImage, serverUrl }) {
   const [platform, setPlatform] = useState("Instagram");
   const [preset, setPreset] = useState(PRESETS[platform][0]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setPreset(PRESETS[platform][0]);
+    setPreset(PRESETS[platform][0] || null);
   }, [platform]);
 
   const handleResize = async () => {
     if (!selectedImage) return alert("Select an image first.");
-    const result = await resizeImage(selectedImage.file, preset.w, preset.h);
+    if (!preset) return alert("No preset selected.");
+    setLoading(true);
 
-    updateImage({
-      ...selectedImage,
-      url: URL.createObjectURL(result),
-      file: result,
-      width: preset.w,
-      height: preset.h,
-    });
+    try {
+      const res = await fetch(`${serverUrl}/resize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: selectedImage.serverFilename,
+          width: preset.w,
+          height: preset.h,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Server error:", data);
+        alert(data.error || "Server resize failed");
+      } else {
+        updateImage({
+          ...selectedImage,
+          url: data.processed,
+          width: preset.w,
+          height: preset.h,
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Server resize failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -56,7 +78,7 @@ export default function ResizeBySocial({ selectedImage, updateImage }) {
 
       <label className="block text-sm font-medium mt-2">Preset</label>
       <select
-        value={preset.name}
+        value={preset?.name || ""}
         onChange={(e) =>
           setPreset(PRESETS[platform].find((p) => p.name === e.target.value))
         }
@@ -71,9 +93,10 @@ export default function ResizeBySocial({ selectedImage, updateImage }) {
 
       <button
         onClick={handleResize}
-        className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+        disabled={loading}
+        className={`w-full py-2 rounded text-white ${loading ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"}`}
       >
-        Apply Resize
+        {loading ? "Resizing..." : "Apply Resize"}
       </button>
     </div>
   );

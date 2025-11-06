@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { resizeImageByPercentage } from "../utils/imageUtils";
 
-export default function ResizeByPercentage({ selectedImage, updateImage }) {
+export default function ResizeByPercentage({ selectedImage, updateImage, serverUrl }) {
   const [percentage, setPercentage] = useState(80);
   const [width, setWidth] = useState(selectedImage?.width || 800);
   const [height, setHeight] = useState(selectedImage?.height || 800);
   const [keepAspect, setKeepAspect] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const originalWidth = selectedImage?.width || 800;
   const originalHeight = selectedImage?.height || 800;
@@ -16,42 +16,45 @@ export default function ResizeByPercentage({ selectedImage, updateImage }) {
     const newHeight = keepAspect
       ? Math.round(newWidth / aspectRatio)
       : Math.round(originalHeight * (percentage / 100));
-
     setWidth(newWidth);
     setHeight(newHeight);
   }, [percentage, keepAspect, originalWidth, originalHeight]);
 
-  const handleWidthChange = (newWidth) => {
-    const newHeight = keepAspect ? Math.round(newWidth / aspectRatio) : height;
-    setWidth(newWidth);
-    setHeight(newHeight);
-    setPercentage(Math.round((newWidth / originalWidth) * 100));
-  };
-
-  const handleHeightChange = (newHeight) => {
-    const newWidth = keepAspect ? Math.round(newHeight * aspectRatio) : width;
-    setHeight(newHeight);
-    setWidth(newWidth);
-    setPercentage(Math.round((newWidth / originalWidth) * 100));
-  };
-
   const handleResize = async () => {
     if (!selectedImage) return alert("Select an image first.");
-
-    const result = await resizeImageByPercentage(selectedImage.file, percentage);
-
-    updateImage({
-      ...selectedImage,
-      url: URL.createObjectURL(result),
-      file: result,
-      width,
-      height,
-    });
+    setLoading(true);
+    try {
+      const res = await fetch(`${serverUrl}/resize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: selectedImage.serverFilename,
+          width: Number(width),
+          height: Number(height),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Server error:", data);
+        alert(data.error || "Server resize failed");
+      } else {
+        updateImage({
+          ...selectedImage,
+          url: data.processed,
+          width: Number(width),
+          height: Number(height),
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Server resize failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="space-y-4">
-      {/* Percentage */}
       <label className="block text-sm text-gray-600 font-medium">
         Resize by Percentage: {percentage}%
       </label>
@@ -64,14 +67,13 @@ export default function ResizeByPercentage({ selectedImage, updateImage }) {
         className="w-full"
       />
 
-      
       <div className="flex gap-2">
         <div className="flex-1">
           <label className="block text-sm text-gray-600">Width (px)</label>
           <input
             type="number"
             value={width}
-            onChange={(e) => handleWidthChange(parseInt(e.target.value))}
+            onChange={(e) => setWidth(parseInt(e.target.value))}
             className="w-full border p-1 rounded"
           />
         </div>
@@ -81,15 +83,12 @@ export default function ResizeByPercentage({ selectedImage, updateImage }) {
             type="number"
             value={height}
             disabled={keepAspect}
-            onChange={(e) => handleHeightChange(parseInt(e.target.value))}
-            className={`w-full border p-1 rounded ${
-              keepAspect ? "bg-gray-100 cursor-not-allowed" : ""
-            }`}
+            onChange={(e) => setHeight(parseInt(e.target.value))}
+            className={`w-full border p-1 rounded ${keepAspect ? "bg-gray-100 cursor-not-allowed" : ""}`}
           />
         </div>
       </div>
 
-      {/* Aspect Ratio */}
       <div>
         <input
           type="checkbox"
@@ -102,9 +101,10 @@ export default function ResizeByPercentage({ selectedImage, updateImage }) {
 
       <button
         onClick={handleResize}
-        className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+        disabled={loading}
+        className={`w-full py-2 rounded text-white ${loading ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"}`}
       >
-        Apply Resize
+        {loading ? "Resizing..." : "Apply Resize"}
       </button>
     </div>
   );

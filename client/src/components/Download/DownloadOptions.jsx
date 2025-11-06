@@ -1,35 +1,74 @@
-import JSZip from "jszip";
-import { saveAs } from "file-saver";
+import { useState } from "react";
 
-export default function DownloadOptions({ selectedImage, editedImages, images }) {
-  
-  const handleDownloadSingle = () => {
-    if (!selectedImage) return alert("Select an image first.");
+export default function DownloadOptions({ selectedImage, editedImages, images, serverUrl }) {
+  const [downloading, setDownloading] = useState(false);
 
-    const file =
-      editedImages[selectedImage.name]?.file || selectedImage.file;
+  // 🖼️ Download single image (edited if available)
+  const handleDownloadSingle = async () => {
+    if (!selectedImage) return alert("Please select an image first.");
 
-    if (!file) return alert("No file available to download");
+    // Prefer processed image if it exists
+    const modifiedFile =
+      editedImages?.[selectedImage.name]?.serverFilename ||
+      selectedImage.serverFilename ||
+      selectedImage.filename;
 
-    saveAs(file, selectedImage.name);
+    if (!modifiedFile) return alert("No file available to download.");
+
+    try {
+      setDownloading(true);
+      const response = await fetch(`${serverUrl}/download?files=${modifiedFile}`);
+      if (!response.ok) throw new Error("Download failed");
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = selectedImage.name || modifiedFile;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Single download error:", err);
+      alert("Failed to download image");
+    } finally {
+      setDownloading(false);
+    }
   };
 
-  
+  // 📦 Download all images (each one either edited or original)
   const handleDownloadAll = async () => {
-    const allImages = images || Object.values(editedImages);
+    const allFiles = images
+      ?.map((img) => {
+        const edited = editedImages?.[img.name]?.serverFilename;
+        return edited || img.serverFilename || img.filename;
+      })
+      .filter(Boolean);
 
-    if (!allImages || allImages.length === 0)
-      return alert("No images to download.");
+    if (!allFiles || allFiles.length === 0)
+      return alert("No images available to download.");
 
-    const zip = new JSZip();
+    try {
+      setDownloading(true);
+      const response = await fetch(`${serverUrl}/download?files=${allFiles.join(",")}`);
+      if (!response.ok) throw new Error("ZIP download failed");
 
-    allImages.forEach((img) => {
-      const file = img.file || editedImages[img.name]?.file;
-      if (file) zip.file(img.name, file);
-    });
-
-    const blob = await zip.generateAsync({ type: "blob" });
-    saveAs(blob, "images.zip");
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `images-${Date.now()}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("ZIP download error:", err);
+      alert("Failed to download ZIP");
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
@@ -38,16 +77,18 @@ export default function DownloadOptions({ selectedImage, editedImages, images })
 
       <button
         onClick={handleDownloadSingle}
-        className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700"
+        disabled={downloading}
+        className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-60"
       >
-        Download Selected Image
+        {downloading ? "Downloading..." : "Download Selected Image"}
       </button>
 
       <button
         onClick={handleDownloadAll}
-        className="w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700"
+        disabled={downloading}
+        className="w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 disabled:opacity-60"
       >
-        Download All as ZIP
+        {downloading ? "Preparing ZIP..." : "Download All as ZIP"}
       </button>
     </div>
   );

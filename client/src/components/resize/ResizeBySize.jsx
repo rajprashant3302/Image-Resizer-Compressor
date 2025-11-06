@@ -1,27 +1,64 @@
 import { useState, useEffect } from "react";
-import { resizeImage } from "../utils/imageUtils";
 
-export default function ResizeBySize({ selectedImage, updateImage }) {
-  const [width, setWidth] = useState(selectedImage?.width || 800);
-  const [height, setHeight] = useState(selectedImage?.height || 800);
+export default function ResizeBySize({ selectedImage, updateImage, serverUrl }) {
+  const [width, setWidth] = useState(0);
+  const [height, setHeight] = useState(0);
   const [keepAspect, setKeepAspect] = useState(true);
+  const [loading, setLoading] = useState(false);
 
+  // ✅ Get actual original size once image is loaded
   useEffect(() => {
-    setWidth(selectedImage.width || 800);
-    setHeight(selectedImage.height || 800);
+    if (!selectedImage) return;
+
+    const img = new Image();
+    img.onload = () => {
+      const w = selectedImage.width || img.naturalWidth;
+      const h = selectedImage.height || img.naturalHeight;
+      setWidth(w);
+      setHeight(h);
+    };
+    img.src = selectedImage.url || selectedImage.originalUrl;
   }, [selectedImage]);
 
   const handleResize = async () => {
     if (!selectedImage) return alert("Select an image first.");
-    const result = await resizeImage(selectedImage.file, width, height);
 
-    updateImage({
-      ...selectedImage,
-      url: URL.createObjectURL(result),
-      file: result,
-      width,
-      height,
-    });
+    const w = Number(width);
+    const h = Number(height);
+    if (!w || !h) return alert("Width and height must be valid numbers.");
+
+    setLoading(true);
+
+    try {
+      const res = await fetch(`${serverUrl}/resize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: selectedImage.serverFilename,
+          width: w,
+          height: h,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("Server error:", data);
+        alert(data.error || "Server resize failed");
+      } else {
+        updateImage({
+          ...selectedImage,
+          url: data.processed,
+          width: w,
+          height: h,
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Server resize failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -40,6 +77,7 @@ export default function ResizeBySize({ selectedImage, updateImage }) {
         }}
         className="w-full border px-2 py-1 rounded"
       />
+
       <label>Height (px)</label>
       <input
         type="number"
@@ -54,6 +92,7 @@ export default function ResizeBySize({ selectedImage, updateImage }) {
         }}
         className="w-full border px-2 py-1 rounded"
       />
+
       <div>
         <input
           type="checkbox"
@@ -63,11 +102,15 @@ export default function ResizeBySize({ selectedImage, updateImage }) {
         />
         Maintain Aspect Ratio
       </div>
+
       <button
         onClick={handleResize}
-        className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+        disabled={loading}
+        className={`w-full py-2 rounded text-white ${
+          loading ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"
+        }`}
       >
-        Apply Resize
+        {loading ? "Resizing..." : "Apply Resize"}
       </button>
     </div>
   );
